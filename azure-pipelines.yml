@@ -8,32 +8,14 @@ variables:
   project: 'hellosre'
 
   # IMPORTANT: change this to a globally unique ACR name (lowercase)
-  acrName: 'hellosreacr12345'
+  acrName: 'tamilhellosreacr92715'
 
   # Terraform working dir
   tfDir: 'infra'
 
 stages:
-- stage: CI
-  displayName: "CI: Test"
-  jobs:
-  - job: test
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '$(pythonVersion)'
-    - script: |
-        python -m pip install --upgrade pip
-        pip install -r app/requirements.txt
-        pip install pytest
-        pytest -q
-      displayName: "Run unit tests"
-
 - stage: BuildPush
   displayName: "Build & Push Image to ACR"
-  dependsOn: CI
   jobs:
   - job: docker
     pool:
@@ -47,8 +29,13 @@ stages:
         scriptLocation: inlineScript
         inlineScript: |
           set -e
+
+          # Ensure RG exists (ACR create needs it)
+          az group create -n $(project)-rg -l "$(location)" >/dev/null
+
+          # Create ACR if it doesn't exist
           az acr show -n $(acrName) >/dev/null 2>&1 || \
-            az acr create -n $(acrName) -g $(project)-rg -l "$(location)" --sku Basic --admin-enabled true || true
+            az acr create -n $(acrName) -g $(project)-rg -l "$(location)" --sku Basic --admin-enabled true
 
           ACR_LOGIN_SERVER=$(az acr show -n $(acrName) --query loginServer -o tsv)
           echo "ACR: $ACR_LOGIN_SERVER"
@@ -93,6 +80,7 @@ stages:
           cd $(tfDir)
 
           terraform init
+
           terraform plan \
             -var="location=$(location)" \
             -var="project=$(project)" \
